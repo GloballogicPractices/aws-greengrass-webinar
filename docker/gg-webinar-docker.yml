@@ -1,0 +1,324 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Create Greengrass resources and group, with supporting AWS services'
+Parameters:
+  CoreName:
+    Description: Core name. Can be chosen randomly, used as a prefix for multiple resource names.
+    Type: String
+    Default: docker-core-001
+  CoreThingArn:
+    Description: Core thing ARN. Can be found in "AWS IoT ~> Manage ~> Things ~> (choose the thing) ~> Details ~> arn:..."
+    Type: String
+    Default: 'arn:aws:iot:us-west-2:531877574785:thing/my-docker-core-thing'
+  CoreThingCertificateArn:
+    Description: Core thing certificate ARN. Can be found in "AWS IoT ~> Manage ~> Things ~> (choose the thing) ~> Security ~> (choose the certificate) ~> arn:..."
+    Type: String
+    Default: >-
+      arn:aws:iot:us-west-2:531877574785:cert/63a8a448b56be6c2851ab3ea788a2e1e08a9a1d5a2edc331223731de35478c0c
+Resources:
+  GreengrassGroup:
+    Type: 'AWS::Greengrass::Group'
+    Properties:
+      Name: !Ref CoreName
+      RoleArn: !GetAtt GreengrassResourceRole.Arn
+      InitialVersion:
+        CoreDefinitionVersionArn: !Ref GreengrassCoreDefinitionVersion
+        FunctionDefinitionVersionArn: !GetAtt FunctionDefinition.LatestVersionArn
+        SubscriptionDefinitionVersionArn: !GetAtt SubscriptionDefinition.LatestVersionArn
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: ab01cc63-7e91-4b10-8a0a-828c96b2e143
+  GreengrassCoreDefinition:
+    Type: 'AWS::Greengrass::CoreDefinition'
+    Properties:
+      Name: !Join 
+        - _
+        - - !Ref CoreName
+          - Core
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 62ce98f4-49cb-4844-bf31-ac339d26d2a6
+  GreengrassCoreDefinitionVersion:
+    Type: 'AWS::Greengrass::CoreDefinitionVersion'
+    Properties:
+      CoreDefinitionId: !Ref GreengrassCoreDefinition
+      Cores:
+        - Id: !Join 
+            - _
+            - - !Ref CoreName
+              - Core
+          ThingArn: !Ref CoreThingArn
+          CertificateArn: !Ref CoreThingCertificateArn
+          SyncShadow: 'false'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 2599ecda-ee53-4aeb-8981-3fa117a89334
+  FunctionDefinition:
+    Type: 'AWS::Greengrass::FunctionDefinition'
+    Properties:
+      Name: FunctionDefinition
+      InitialVersion:
+        DefaultConfig:
+          Execution:
+            IsolationMode: NoContainer
+        Functions:
+          - Id: !Join 
+              - _
+              - - !Ref CoreName
+                - sample
+            FunctionArn: !Ref GGSampleFunctionVersion
+            FunctionConfiguration:
+              Pinned: 'true'
+              Executable: index.py
+              Timeout: '300'
+              EncodingType: binary
+              Environment:
+                Variables:
+                  CORE_NAME: !Ref CoreName
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: d7abd867-f8d7-41b0-a9bd-c043af0dd1d2
+  SubscriptionDefinition:
+    Type: 'AWS::Greengrass::SubscriptionDefinition'
+    Properties:
+      Name: SubscriptionDefinition
+      InitialVersion:
+        Subscriptions:
+          - Id: Subscription1
+            Source: cloud
+            Subject: !Join 
+              - /
+              - - !Ref CoreName
+                - in
+            Target: !Ref GGSampleFunctionVersion
+          - Id: Subscription2
+            Source: !Ref GGSampleFunctionVersion
+            Subject: !Join 
+              - /
+              - - !Ref CoreName
+                - out
+            Target: cloud
+          - Id: Subscription3
+            Source: !Ref GGSampleFunctionVersion
+            Subject: !Join 
+              - /
+              - - !Ref CoreName
+                - telem
+            Target: cloud
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 6c73fa87-0874-41b2-9780-8c2513d37d05
+  GGSampleFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Join 
+        - _
+        - - !Ref CoreName
+          - sample
+      Description: Long running lambda that provides telemetry and pub/sub echo
+      Handler: index.function_handler
+      Runtime: python2.7
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import os
+          import time
+          import json
+          from threading import Timer
+          import greengrasssdk
+
+          counter = 0
+          client = greengrasssdk.client('iot-data')
+
+          def sendTelemetry():
+              'Send telemetry every 5 seconds'
+              global counter
+              counter += 1
+              message = { 
+                "count": counter,
+                "timestamp": time.time()
+              }
+              client.publish(
+                  topic='{}/telem'.format(os.environ['CORE_NAME']),
+                  payload=json.dumps(message)
+              )
+              Timer(5, sendTelemetry).start()
+          # Call telemetry() to start telemetry publish
+          sendTelemetry()
+
+
+          def function_handler(event, context):
+              '''Echo message on /in topic to /out topic'''
+              client.publish(
+                  topic='{}/out'.format(os.environ['CORE_NAME']),
+                  payload=event
+              )
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e6d6ae49-acc8-466f-8701-538e01ee422a
+  GGSampleFunctionVersion:
+    Type: 'AWS::Lambda::Version'
+    Properties:
+      FunctionName: !GetAtt GGSampleFunction.Arn
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 9004f8b8-b419-4c27-9f1f-9d466aee889a
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'iot:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'greengrass:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - 'iam:CreateRole'
+                  - 'iam:AttachRolePolicy'
+                  - 'iam:GetRole'
+                  - 'iam:DeleteRole'
+                  - 'iam:PassRole'
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':role/greengrass_cfn_'
+                    - !Ref 'AWS::StackName'
+                    - _ServiceRole
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 9cf68791-fd57-413c-810c-7ed668015e1e
+  GreengrassResourceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: greengrass.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - 'iot:*'
+                Resource: '*'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e90e1d89-c601-4cc6-8de9-b4ac59b3686c
+Metadata:
+  'AWS::CloudFormation::Designer':
+    e90e1d89-c601-4cc6-8de9-b4ac59b3686c:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 410
+        'y': 410
+      z: 1
+      embeds: []
+    9cf68791-fd57-413c-810c-7ed668015e1e:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -70
+        'y': 160
+      z: 1
+      embeds: []
+    e6d6ae49-acc8-466f-8701-538e01ee422a:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 60
+        'y': 160
+      z: 1
+      embeds: []
+    9004f8b8-b419-4c27-9f1f-9d466aee889a:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 180
+        'y': 160
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - e6d6ae49-acc8-466f-8701-538e01ee422a
+    6c73fa87-0874-41b2-9780-8c2513d37d05:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 310
+        'y': 160
+      z: 1
+      embeds: []
+    d7abd867-f8d7-41b0-a9bd-c043af0dd1d2:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 180
+        'y': 260
+      z: 1
+      embeds: []
+    62ce98f4-49cb-4844-bf31-ac339d26d2a6:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 70
+        'y': 410
+      z: 1
+      embeds: []
+    2599ecda-ee53-4aeb-8981-3fa117a89334:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 180
+        'y': 410
+      z: 1
+      embeds: []
+    ab01cc63-7e91-4b10-8a0a-828c96b2e143:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 310
+        'y': 410
+      z: 1
+      embeds: []

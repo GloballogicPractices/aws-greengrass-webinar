@@ -1,0 +1,546 @@
+AWSTemplateFormatVersion: 2010-09-09
+Description: 'Create Greengrass resources and group, with supporting AWS services'
+Parameters:
+  CoreName:
+    Description: Core name. Can be chosen randomly, used as a prefix for multiple resource names.
+    Type: String
+    Default: raspberry-core-001
+  CoreThingName:
+    Description: Core thing name. Can be found in the console, namely "AWS IoT ~> Manage ~> Things ~> (see the thing name)"
+    Type: String
+    Default: my-raspberry-core-thing
+  CoreThingArn:
+    Description: Core thing ARN. Can be found in "AWS IoT ~> Manage ~> Things ~> (choose the thing) ~> Details ~> arn:..."
+    Type: String
+    Default: 'arn:aws:iot:us-west-2:531877574785:thing/my-raspberry-core-thing'
+  CoreThingCertificateArn:
+    Description: Core thing certificate ARN. Can be found in "AWS IoT ~> Manage ~> Things ~> (choose the thing) ~> Security ~> (choose the certificate) ~> arn:..."
+    Type: String
+    Default: >-
+      arn:aws:iot:us-west-2:531877574785:cert/63a8a448b56be6c2851ab3ea788a2e1e08a9a1d5a2edc331223731de35478c0c
+Resources:
+  GreengrassGroup:
+    Type: 'AWS::Greengrass::Group'
+    Properties:
+      Name: !Ref CoreName
+      RoleArn: !GetAtt GreengrassResourceRole.Arn
+      InitialVersion:
+        CoreDefinitionVersionArn: !Ref GreengrassCoreDefinitionVersion
+        FunctionDefinitionVersionArn: !GetAtt FunctionDefinition.LatestVersionArn
+        SubscriptionDefinitionVersionArn: !GetAtt SubscriptionDefinition.LatestVersionArn
+        ResourceDefinitionVersionArn: !Ref MyResourceDefinitionVersion
+        ConnectorDefinitionVersionArn: !Ref MyConnectorDefinitionVersion
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: aa7692a4-0271-41a3-a8fd-b8f725130507
+  GreengrassCoreDefinition:
+    Type: 'AWS::Greengrass::CoreDefinition'
+    Properties:
+      Name: !Join 
+        - _
+        - - !Ref CoreName
+          - Core
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: e47b6c85-cd2b-44a6-b92f-826ca72f54f6
+  GreengrassCoreDefinitionVersion:
+    Type: 'AWS::Greengrass::CoreDefinitionVersion'
+    Properties:
+      CoreDefinitionId: !Ref GreengrassCoreDefinition
+      Cores:
+        - Id: !Join 
+            - _
+            - - !Ref CoreName
+              - Core
+          ThingArn: !Ref CoreThingArn
+          CertificateArn: !Ref CoreThingCertificateArn
+          SyncShadow: 'false'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 9debca26-871a-4684-91a5-d3a1720314d7
+  FunctionDefinition:
+    Type: 'AWS::Greengrass::FunctionDefinition'
+    Properties:
+      Name: FunctionDefinition
+      InitialVersion:
+        DefaultConfig:
+          Execution:
+            IsolationMode: GreengrassContainer
+        Functions:
+          - Id: !Join 
+              - _
+              - - !Ref CoreName
+                - sample
+            FunctionArn: !Ref GGSampleFunctionVersion
+            FunctionConfiguration:
+              Pinned: 'true'
+              Executable: index.py
+              MemorySize: '65536'
+              Timeout: '300'
+              EncodingType: binary
+              Environment:
+                Variables:
+                  CORE_NAME: !Ref CoreName
+                AccessSysfs: 'false'
+                Execution:
+                  IsolationMode: GreengrassContainer
+                  RunAs:
+                    Uid: '1'
+                    Gid: '10'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 24f4c445-29cb-40f7-a7d6-d26c4604e5bd
+  SubscriptionDefinition:
+    Type: 'AWS::Greengrass::SubscriptionDefinition'
+    Properties:
+      Name: SubscriptionDefinition
+      InitialVersion:
+        Subscriptions:
+          - Id: Subscription1
+            Source: cloud
+            Subject: !Join 
+              - /
+              - - !Ref CoreName
+                - in
+            Target: !Ref GGSampleFunctionVersion
+          - Id: Subscription2
+            Source: !Ref GGSampleFunctionVersion
+            Subject: !Join 
+              - /
+              - - !Ref CoreName
+                - out
+            Target: cloud
+          - Id: Subscription3
+            Source: !Ref GGSampleFunctionVersion
+            Subject: !Join 
+              - /
+              - - !Ref CoreName
+                - telem
+            Target: cloud
+          - Id: LightWriteSubscription
+            Source: cloud
+            Subject: !Join 
+              - /
+              - - gpio
+                - !Ref CoreThingName
+                - 20/write
+            Target: !Join 
+              - ''
+              - - 'arn:aws:greengrass:'
+                - !Ref 'AWS::Region'
+                - '::/connectors/RaspberryPiGPIO/versions/1'
+          - Id: LightReadSubscription
+            Source: cloud
+            Subject: !Join 
+              - /
+              - - gpio
+                - !Ref CoreThingName
+                - 20/read
+            Target: !Join 
+              - ''
+              - - 'arn:aws:greengrass:'
+                - !Ref 'AWS::Region'
+                - '::/connectors/RaspberryPiGPIO/versions/1'
+          - Id: LightStateSubscription
+            Source: !Join 
+              - ''
+              - - 'arn:aws:greengrass:'
+                - !Ref 'AWS::Region'
+                - '::/connectors/RaspberryPiGPIO/versions/1'
+            Subject: !Join 
+              - /
+              - - gpio
+                - !Ref CoreThingName
+                - 20/state
+            Target: cloud
+          - Id: ButtonReadSubscription
+            Source: cloud
+            Subject: !Join 
+              - /
+              - - gpio
+                - !Ref CoreThingName
+                - 21/read
+            Target: !Join 
+              - ''
+              - - 'arn:aws:greengrass:'
+                - !Ref 'AWS::Region'
+                - '::/connectors/RaspberryPiGPIO/versions/1'
+          - Id: ButtonStateSubscription
+            Source: !Join 
+              - ''
+              - - 'arn:aws:greengrass:'
+                - !Ref 'AWS::Region'
+                - '::/connectors/RaspberryPiGPIO/versions/1'
+            Subject: !Join 
+              - /
+              - - gpio
+                - !Ref CoreThingName
+                - 21/state
+            Target: cloud
+          - Id: ErrorSubscription
+            Source: !Join 
+              - ''
+              - - 'arn:aws:greengrass:'
+                - !Ref 'AWS::Region'
+                - '::/connectors/RaspberryPiGPIO/versions/1'
+            Subject: !Join 
+              - /
+              - - gpio
+                - !Ref CoreThingName
+                - error
+            Target: cloud
+          - Id: LambdaToCloudWatchSubscription
+            Source: !Ref GGSampleFunctionVersion
+            Target: !Join 
+              - ''
+              - - 'arn:aws:greengrass:'
+                - !Ref 'AWS::Region'
+                - '::/connectors/CloudWatchMetrics/versions/1'
+            Subject: cloudwatch/metric/put
+          - Id: CloudWatchToCloudSubscription
+            Source: !Join 
+              - ''
+              - - 'arn:aws:greengrass:'
+                - !Ref 'AWS::Region'
+                - '::/connectors/CloudWatchMetrics/versions/1'
+            Subject: cloudwatch/metric/put/status
+            Target: cloud
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 6f8fe6e5-7a7c-4112-9918-17ac55e05e48
+  GGSampleFunction:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Join 
+        - _
+        - - !Ref CoreName
+          - sample
+      Description: Long running lambda that provides telemetry and pub/sub echo
+      Handler: index.function_handler
+      Runtime: python2.7
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Timeout: 60
+      Code:
+        ZipFile: |
+          import os
+          import time
+          import json
+          import psutil
+          from threading import Timer
+          import greengrasssdk
+
+
+          counter = 0
+          iot_client = greengrasssdk.client('iot-data')
+
+          def create_request_with_all_fields():
+            return  {
+                "request": {
+                    "namespace": "Greengrass_CW_Connector",
+                    "metricData": {
+                        "metricName": "CpuLoad",
+                        "dimensions": [
+                            {
+                                "name": "env",
+                                "value": os.environ['CORE_NAME']
+                            }
+                        ],
+                        "value": psutil.cpu_percent(),
+                        "unit": "Percent",
+                        "timestamp": time.time()
+                    }
+                }
+            }
+
+
+          def telemetry():
+              '''Publish incrementing value to telemetry topic every 2 seconds'''
+              global counter
+              counter += 1
+              iot_client.publish(
+                  topic='{}/telem'.format(os.environ['CORE_NAME']),
+                  payload='Example telemetry counter, value: {}'.format(counter)
+              )
+
+              metricsMessage = create_request_with_all_fields()
+              print "Message To Publish: ", metricsMessage
+              iot_client.publish(topic='cloudwatch/metric/put', payload=json.dumps(metricsMessage))
+
+              Timer(5, telemetry).start()
+          # Call telemetry() to start telemetry publish
+          telemetry()
+
+
+          def function_handler(event, context):
+              print "Received an event: ", event
+              iot_client.publish(
+                  topic='{}/out'.format(os.environ['CORE_NAME']),
+                  payload=event
+              )
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 435fa616-40b4-4cac-946a-65a7c2261b1d
+  GGSampleFunctionVersion:
+    Type: 'AWS::Lambda::Version'
+    Properties:
+      FunctionName: !GetAtt GGSampleFunction.Arn
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: b32f1d8e-0d54-4fce-b468-70d2ad709bae
+  LambdaExecutionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'iot:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'greengrass:*'
+                Resource: '*'
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - 'iam:CreateRole'
+                  - 'iam:AttachRolePolicy'
+                  - 'iam:GetRole'
+                  - 'iam:DeleteRole'
+                  - 'iam:PassRole'
+                Resource: !Join 
+                  - ''
+                  - - 'arn:aws:iam::'
+                    - !Ref 'AWS::AccountId'
+                    - ':role/greengrass_cfn_'
+                    - !Ref 'AWS::StackName'
+                    - _ServiceRole
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 0437ec25-145e-45d1-abc7-a8d1e8cd8b31
+  MyConnectorDefinition:
+    Type: 'AWS::Greengrass::ConnectorDefinition'
+    Properties:
+      Name: DemoTestConnectorDefinition
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 894a35f4-a107-4461-849e-da21502905fa
+  MyConnectorDefinitionVersion:
+    Type: 'AWS::Greengrass::ConnectorDefinitionVersion'
+    Properties:
+      ConnectorDefinitionId: !Ref MyConnectorDefinition
+      Connectors:
+        - Id: RaspberryPiGPIOConnector
+          ConnectorArn: !Join 
+            - ':'
+            - - 'arn:aws:greengrass'
+              - !Ref 'AWS::Region'
+              - ':/connectors/RaspberryPiGPIO/versions/1'
+          Parameters:
+            InputGpios: 21D
+            InputPollPeriod: 50
+            OutputGpios: '20'
+            GpioMem-ResourceId: LocalGPIOResource
+        - Id: CloudWatchConnector
+          ConnectorArn: !Join 
+            - ':'
+            - - 'arn:aws:greengrass'
+              - !Ref 'AWS::Region'
+              - ':/connectors/CloudWatchMetrics/versions/1'
+          Parameters:
+            PublishInterval: 5
+            PublishRegion: !Ref 'AWS::Region'
+            MemorySize: 4096
+            MaxMetricsToRetain: 2500
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: cf69107b-374c-43cf-ab76-940359b0f3e5
+  MyResourceDefinition:
+    Type: 'AWS::Greengrass::ResourceDefinition'
+    Properties:
+      Name: DemoTestResourceDefinition
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 685b7ad5-96b0-4ea2-9376-225c1d4d1ebf
+  MyResourceDefinitionVersion:
+    Type: 'AWS::Greengrass::ResourceDefinitionVersion'
+    Properties:
+      ResourceDefinitionId: !Ref MyResourceDefinition
+      Resources:
+        - Id: LocalGPIOResource
+          Name: LocalGPIOResource
+          ResourceDataContainer:
+            LocalDeviceResourceData:
+              SourcePath: /dev/gpiomem
+              GroupOwnerSetting:
+                AutoAddGroupOwner: 'true'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: bdb9f83a-ae6c-40e4-a63f-8e04e7b591dc
+  GreengrassResourceRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: greengrass.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: root
+          PolicyDocument:
+            Version: 2012-10-17
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 'arn:aws:logs:*:*:*'
+              - Effect: Allow
+                Action:
+                  - 'iot:*'
+                Resource: '*'
+              - Effect: Allow
+                Action: 'cloudwatch:PutMetricData'
+                Resource: '*'
+    Metadata:
+      'AWS::CloudFormation::Designer':
+        id: 3fd7b6ce-dccf-4e31-a71a-20e2a3297a0a
+Metadata:
+  'AWS::CloudFormation::Designer':
+    3fd7b6ce-dccf-4e31-a71a-20e2a3297a0a:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 30
+        'y': 380
+      z: 1
+      embeds: []
+    685b7ad5-96b0-4ea2-9376-225c1d4d1ebf:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -50
+        'y': 260
+      z: 1
+      embeds: []
+    bdb9f83a-ae6c-40e4-a63f-8e04e7b591dc:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 60
+        'y': 260
+      z: 1
+      embeds: []
+    894a35f4-a107-4461-849e-da21502905fa:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: -10
+        'y': 170
+      z: 1
+      embeds: []
+    cf69107b-374c-43cf-ab76-940359b0f3e5:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 140
+        'y': 170
+      z: 1
+      embeds: []
+    0437ec25-145e-45d1-abc7-a8d1e8cd8b31:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 560
+        'y': 260
+      z: 1
+      embeds: []
+    435fa616-40b4-4cac-946a-65a7c2261b1d:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 450
+        'y': 260
+      z: 1
+      embeds: []
+    b32f1d8e-0d54-4fce-b468-70d2ad709bae:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 340
+        'y': 260
+      z: 1
+      embeds: []
+      isassociatedwith:
+        - 435fa616-40b4-4cac-946a-65a7c2261b1d
+    6f8fe6e5-7a7c-4112-9918-17ac55e05e48:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 340
+        'y': 380
+      z: 1
+      embeds: []
+    24f4c445-29cb-40f7-a7d6-d26c4604e5bd:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 210
+        'y': 260
+      z: 1
+      embeds: []
+    e47b6c85-cd2b-44a6-b92f-826ca72f54f6:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 340
+        'y': 480
+      z: 1
+      embeds: []
+    9debca26-871a-4684-91a5-d3a1720314d7:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 230
+        'y': 480
+      z: 1
+      embeds: []
+    aa7692a4-0271-41a3-a8fd-b8f725130507:
+      size:
+        width: 60
+        height: 60
+      position:
+        x: 140
+        'y': 380
+      z: 1
+      embeds: []
