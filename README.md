@@ -103,8 +103,8 @@ aws iot attach-policy \
 
 ### Configure the Core Device
 In this sample, we show two setups:
-* Docker
-* Raspberry Pi.
+* [Docker](docker/docker.md)
+* [Raspberry Pi](rpi/rpi.md)
 
 Read the corresponding articles to start the Greengrass Cores.
 
