@@ -1,0 +1,10 @@
+ansible_user: pi
+
+cert:         63a8a448b5-certificate.pem.crt
+private_key:  63a8a448b5-private.pem.key
+public_key:   63a8a448b5-public.pem.key
+
+aws_region:        us-west-2
+thing_arn:         arn:aws:iot:us-west-2:531877574785:thing/my-raspberry-core-thing
+iot_host_prefix:   aldkbv2oua7qj
+
