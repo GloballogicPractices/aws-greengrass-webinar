@@ -195,14 +195,14 @@ Resources:
               - ''
               - - 'arn:aws:greengrass:'
                 - !Ref 'AWS::Region'
-                - '::/connectors/CloudWatchMetrics/versions/1'
+                - '::/connectors/CloudWatchMetrics/versions/2'
             Subject: cloudwatch/metric/put
           - Id: CloudWatchToCloudSubscription
             Source: !Join 
               - ''
               - - 'arn:aws:greengrass:'
                 - !Ref 'AWS::Region'
-                - '::/connectors/CloudWatchMetrics/versions/1'
+                - '::/connectors/CloudWatchMetrics/versions/2'
             Subject: cloudwatch/metric/put/status
             Target: cloud
     Metadata:
@@ -264,7 +264,10 @@ Resources:
 
               metricsMessage = create_request_with_all_fields()
               print "Message To Publish: ", metricsMessage
-              iot_client.publish(topic='cloudwatch/metric/put', payload=json.dumps(metricsMessage))
+              iot_client.publish(
+                topic='cloudwatch/metric/put', 
+                payload=json.dumps(metricsMessage)
+              )
 
               Timer(5, telemetry).start()
           # Call telemetry() to start telemetry publish
@@ -361,7 +364,7 @@ Resources:
             - ':'
             - - 'arn:aws:greengrass'
               - !Ref 'AWS::Region'
-              - ':/connectors/CloudWatchMetrics/versions/1'
+              - ':/connectors/CloudWatchMetrics/versions/2'
           Parameters:
             PublishInterval: 5
             PublishRegion: !Ref 'AWS::Region'
