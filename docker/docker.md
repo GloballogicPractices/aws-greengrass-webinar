@@ -12,7 +12,7 @@ The AWS docs article doesn't include sufficient information to run the code in D
 #### Get the AWS Greengrass docker image
 Login to Docker using AWS CLI command line generator (use bash command substitution exactly how it's shown below).
 ```bash
-`aws ecr get-login --registry-ids 216483018798 --no-include-email --region us-west-2`
+eval "$(aws ecr get-login --registry-ids 216483018798 --no-include-email --region us-west-2)"
 ```
 Pull the latest Greengrass docker image from the AWS ECR
 ```bash
