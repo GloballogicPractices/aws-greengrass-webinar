@@ -5,58 +5,45 @@
     gg_core_architecture: linux-armv7l
     gg_core_package_filename: greengrass-{{gg_core_architecture}}-{{gg_core_version}}.tar.gz
   tasks:
-  # # https://docs.aws.amazon.com/greengrass/latest/developerguide/setup-filter.rpi.html , section 9
-  # - name: Create GG user group
-  #   group:
-  #     name: ggc_group
-  #     state: present
-  #     system: yes
+  # https://docs.aws.amazon.com/greengrass/latest/developerguide/setup-filter.rpi.html , section 9
+  - name: Create GG user group
+    group:
+      name: ggc_group
+      state: present
+      system: yes
 
-  # - name: Create GG user
-  #   group:
-  #     name: ggc_user
-  #     state: present
-  #     system: yes
+  - name: Create GG user
+    group:
+      name: ggc_user
+      state: present
+      system: yes
 
-  # # https://docs.aws.amazon.com/greengrass/latest/developerguide/setup-filter.rpi.html , section 10
-  # - name: Turn on fs.protected_hardlinks
-  #   lineinfile:
-  #     regexp: '^\s*fs\.protected_hardlinks\s*='
-  #     line: 'fs.protected_hardlinks = 1'
-  #     path: /etc/sysctl.d/98-rpi.conf
-  #     create: yes
-  #     backup: yes
+  # https://docs.aws.amazon.com/greengrass/latest/developerguide/setup-filter.rpi.html , section 10
+  - name: Turn on fs.protected_hardlinks
+    lineinfile:
+      regexp: '^\s*fs\.protected_hardlinks\s*='
+      line: 'fs.protected_hardlinks = 1'
+      path: /etc/sysctl.d/98-rpi.conf
+      create: yes
+      backup: yes
 
-  # - name: Turn on fs.protected_symlinks
-  #   lineinfile:
-  #     regexp: '^\s*fs\.protected_symlinks\s*='
-  #     line: 'fs.protected_symlinks = 1'
-  #     path: /etc/sysctl.d/98-rpi.conf
-  #     create: yes    
-  #     backup: yes
-  #- name: Reboot a slow machine that might have lots of updates to apply
-  #  reboot:
-  #    reboot_timeout: 3000
+  - name: Turn on fs.protected_symlinks
+    lineinfile:
+      regexp: '^\s*fs\.protected_symlinks\s*='
+      line: 'fs.protected_symlinks = 1'
+      path: /etc/sysctl.d/98-rpi.conf
+      create: yes    
+      backup: yes
+  - name: Reboot
+    reboot:
+      reboot_timeout: 3000
 
   # TODO: check the proper lines exits in the output of 'sudo sysctl -a 2> /dev/null | grep fs.protected'
 
-
-
-  # TODO: https://docs.aws.amazon.com/greengrass/latest/developerguide/setup-filter.rpi.html , section 11
-#  - name: Replace after the expression till the end of the file
-#    replace:
-#      path: /home/pi/1.txt
-#      # after: 'NameVirtualHost [*]'
-#      regexp: '^((?!cgroup_enable=memory cgroup_memory=1).)*$'
-#      replace: '\1 cgroup_enable=memory cgroup_memory=1'    
-
-  # TODO: How to deal with the depencency checker? https://docs.aws.amazon.com/greengrass/latest/developerguide/setup-filter.rpi.html , section 12
-
-
   # Install Python dependencies
-  # - name: Install Python dependencies
-  #   pip:
-  #     name: ['greengrasssdk', 'RPi.GPIO', 'psutil']
+  - name: Install Python dependencies
+    pip:
+      name: ['greengrasssdk', 'RPi.GPIO', 'psutil']
 
 
   - name: Create `install-gg` dir
@@ -88,7 +75,7 @@
       url: https://www.amazontrust.com/repository/AmazonRootCA1.pem
       dest: /greengrass/certs/root.ca.pem
 
-  # Configure
+  # Generate configuration file
   - name:
     template:
       src: templates/config.json.j2
